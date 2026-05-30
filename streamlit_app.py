@@ -29,8 +29,23 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # FIX 1: Clean the string for the API call (strip spaces and convert to lowercase)
+        # Clean the name string
         search_on = fruit_chosen.strip().lower()
+        
+        # --- FIX: Map Plurals to Singular for Fruityvice API ---
+        if search_on == 'apples':
+            search_on = 'apple'
+        elif search_on == 'elderberries':
+            search_on = 'elderberry'
+        elif search_on == 'blueberries':
+            search_on = 'blueberry'
+        elif search_on == 'cantaloupe':
+            # Fruityvice lists this specific variation sometimes as 'melon' or needs exact match checking
+            search_on = 'cantaloupe' 
+        elif search_on == 'ximenia':
+            # Note: Ximenia might not be in the Fruityvice public database at all
+            search_on = 'ximenia'
+        # ------------------------------------------------------
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         try:
@@ -42,7 +57,7 @@ if ingredients_list:
             if "error" in fv_data:
                 st.warning(f"Fruityvice API: {fv_data['error']} for {fruit_chosen}")
             else:
-                # FIX 2: Flatten the nested JSON structure into a clean table matching Image 1
+                # Flatten the nested JSON structure into a clean table matching your goal
                 fv_df = pd.json_normalize(fv_data)
                 st.dataframe(data=fv_df, use_container_width=True)
                 
