@@ -12,13 +12,13 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# CRITICAL FIX: Pull both FRUIT_NAME and SEARCH_ON columns from Snowflake
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON')).to_pandas()
+# FIX: Only select FRUIT_NAME since SEARCH_ON column does not exist yet
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME')).to_pandas()
 
-# The multiselect should only display clean text strings
+# Dropdown displays clean text strings
 ingredients_list = st.multiselect(
     'Choose up to 5 ingredients:',
-    my_dataframe['FRUIT_NAME'].values, # Clean list of names for the dropdown
+    my_dataframe['FRUIT_NAME'].values, 
     max_selections=5
 )
 
@@ -28,21 +28,21 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # Look up the correct search term from the dataframe for the API call
-        search_on = my_dataframe.loc[my_dataframe['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+        # Format the fruit name safely for the API URL (e.g., "Dragon Fruit" -> "Dragon%20Fruit")
+        search_on = fruit_chosen.replace(' ', '%20')
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         try:
-            # Call the Fruityvice API using the clean search_on value
+            # Call the Fruityvice API using the formatted name string
             fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
             fv_data = fruityvice_response.json()
             
-            # Displaying as text/json directly or a clean table
+            # Display the API data on screen
             st.dataframe(data=fv_data, use_container_width=True)
         except Exception as e:
             st.write(f"Could not get nutrition info for {fruit_chosen}")
 
-    # Build the insert statement securely
+    # Build the insert statement securely using bind parameters (?)
     my_insert_stmt = """
         INSERT INTO smoothies.public.orders(ingredients, name_on_order)
         VALUES (?, ?)
@@ -50,6 +50,6 @@ if ingredients_list:
 
     time_to_insert = st.button('Submit Order')
     if time_to_insert:
-        # Using parameters prevents SQL injection and syntax errors with quotes
+        # Execute statement safely using native parameters to avoid breaking on names like "faizan"
         session.sql(my_insert_stmt, params=[ingredients_string.strip(), name_on_order]).collect()
         st.success('Your Smoothie is ordered!', icon="✅")
