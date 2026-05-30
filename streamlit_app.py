@@ -21,17 +21,33 @@ st.write("""
 name_on_order = st.text_input('Name on Smoothie:')
 st.write('The name on your Smoothie will be:', name_on_order)
 
-# New SniS Connection (Uses st.connection instead of get_active_session)
+# New SniS Connection
 cnx = st.connection("snowflake")
 session = cnx.session()
 
+# Pull the table data
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME')).to_pandas()
-#st.dataframe(data=my_dataframe, use_container_width=True)
+
+# --- FIX FOR THE JSON ISSUE ---
+# If your database column has stringified JSON, we must extract just the name.
+# We look for the 'name' key; if it's already a clean string, it falls back safely.
+def extract_fruit_name(val):
+    if isinstance(val, str) and val.startswith('{'):
+        import json
+        try:
+            return json.loads(val).get('name', val)
+        except:
+            return val
+    return val
+
+# Clean the dataframe column before sending it to the multiselect
+clean_fruit_list = my_dataframe['FRUIT_NAME'].apply(extract_fruit_name)
+# ------------------------------
 
 ingredients_list = st.multiselect(
-    'Choose up to 5 ingredients:'
-    , my_dataframe['FRUIT_NAME']
-    , max_selections=5
+    'Choose up to 5 ingredients:',
+    clean_fruit_list, # Passed the cleaned list here
+    max_selections=5
 )
 
 if ingredients_list:
@@ -40,14 +56,16 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
 
-    #st.write(ingredients_string)
-
-    my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
-            values ('""" + ingredients_string + """', '"""+name_on_order+"""')"""
+    # Using bind variables inside session.sql() protects against SQL syntax errors
+    # if a user types weird characters or quotes in their name.
+    my_insert_stmt = """
+        INSERT INTO smoothies.public.orders (ingredients, name_on_order)
+        VALUES (?, ?)
+    """
     
-    # Optional: If you want to trigger the insert on button click
     time_to_insert = st.button('Submit Order')
 
     if time_to_insert:
-        session.sql(my_insert_stmt).collect()
+        # Pass the values securely into the query execution
+        session.sql(my_insert_stmt, params=[ingredients_string.strip(), name_on_order]).collect()
         st.success('Your Smoothie is ordered!', icon="✅")
