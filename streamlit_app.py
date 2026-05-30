@@ -1,8 +1,10 @@
+# Import python packages
 import streamlit as st
 from snowflake.snowpark.functions import col
 import requests
 import pandas as pd
 
+# Write directly to the app
 st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
 st.write("Choose the fruits you want in your custom Smoothie!")
 
@@ -13,80 +15,49 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# Fetch table data
+# Fetch table data matching your dataset schema
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME')).to_pandas()
 
-# Dropdown menu
+# Multiselect input matching Image 2
 ingredients_list = st.multiselect(
     'Choose up to 5 ingredients:',
-    my_dataframe['FRUIT_NAME'].values, 
+    my_dataframe['FRUIT_NAME'].values,
     max_selections=5
 )
 
 if ingredients_list:
     ingredients_string = ''
-    
-    # Ek list structured rows collect karne ke liye
-    nutrition_rows = []
 
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # Base string cleanup
-        search_on = fruit_chosen.strip().lower()
+        st.subheader(fruit_chosen + ' Nutrition Information')
         
-        # Mapping Fixes for Fruityvice
-        if search_on == 'apples':
-            search_on = 'apple'
-        elif search_on == 'blueberries':
-            search_on = 'blueberry'
-        elif search_on == 'elderberries':
-            search_on = 'elderberry'
-        elif search_on == 'dragon fruit':
-            search_on = 'pitahaya'
-        elif search_on == 'cantaloupe':
-            search_on = 'melon'
-        
+        # Smoothiefroot API URL call as shown in Image 4 code line 35
         try:
-            # Call the Fruityvice API
-            fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
-            fv_data = fruityvice_response.json()
+            smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+            sf_data = smoothiefroot_response.json()
             
-            if "error" not in fv_data and "nutritions" in fv_data:
-                nutritions = fv_data["nutritions"]
+            # Check if API returned an array or direct object, then flatten appropriately
+            if isinstance(sf_data, list):
+                sf_df = pd.json_normalize(sf_data)
+            else:
+                sf_df = pd.json_normalize([sf_data])
                 
-                # Image 3 ke horizontal-vertical stacked mapping layout ko manually mirror karna:
-                metrics = ['carbs', 'fat', 'protein', 'sugar']
-                api_keys = ['carbohydrates', 'fat', 'protein', 'sugar']
-                
-                for metric, key in zip(metrics, api_keys):
-                    nutrition_rows.append({
-                        '': metric,
-                        'family': fv_data.get('family', ''),
-                        'genus': fv_data.get('genus', ''),
-                        'id': fv_data.get('id', ''),
-                        'name': fv_data.get('name', ''),
-                        'nutrition': nutritions.get(key, 0.0),
-                        'order': fv_data.get('order', '')
-                    })
-                
+            # If the database returns nested nutritions properties, match the layout in Image 3
+            st.dataframe(data=sf_df, use_container_width=True)
+            
         except Exception as e:
-            pass
+            st.write(f"Sorry, {fruit_chosen} nutrition info is not available right now.")
 
-    # LOOP KE BAHAR: Saara data ek sath exact image 3 ke order mein display hoga
-    if nutrition_rows:
-        combined_df = pd.DataFrame(nutrition_rows)
-        # First index column ko left side empty label key set karna
-        combined_df.set_index('', inplace=True)
-        st.dataframe(data=combined_df, use_container_width=True)
-
-    # Secure database insert
+    # Insert Statement with bind parameters to avoid parsing errors
     my_insert_stmt = """
         INSERT INTO smoothies.public.orders(ingredients, name_on_order)
         VALUES (?, ?)
     """
-
+    
     time_to_insert = st.button('Submit Order')
+
     if time_to_insert:
         session.sql(my_insert_stmt, params=[ingredients_string.strip(), name_on_order]).collect()
         st.success('Your Smoothie is ordered!', icon="✅")
