@@ -15,10 +15,10 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# Fetch table data matching your dataset schema
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME')).to_pandas()
+# UPDATED: Select both FRUIT_NAME and SEARCH_ON columns from Snowflake
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON')).to_pandas()
 
-# Multiselect input matching Image 2
+# Dropdown options display only the clean FRUIT_NAME values
 ingredients_list = st.multiselect(
     'Choose up to 5 ingredients:',
     my_dataframe['FRUIT_NAME'].values,
@@ -31,26 +31,28 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
+        # UPDATED: Get the matching SEARCH_ON value for the selected fruit
+        search_on = my_dataframe.loc[my_dataframe['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+        
         st.subheader(fruit_chosen + ' Nutrition Information')
         
-        # Smoothiefroot API URL call as shown in Image 4 code line 35
         try:
-            smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+            # UPDATED: Hit the correct smoothiefroot API using the search_on variable
+            smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + search_on)
             sf_data = smoothiefroot_response.json()
             
-            # Check if API returned an array or direct object, then flatten appropriately
+            # Convert JSON data into a clean structured table matching Image 3 layout
             if isinstance(sf_data, list):
                 sf_df = pd.json_normalize(sf_data)
             else:
                 sf_df = pd.json_normalize([sf_data])
                 
-            # If the database returns nested nutritions properties, match the layout in Image 3
             st.dataframe(data=sf_df, use_container_width=True)
             
         except Exception as e:
-            st.write(f"Sorry, {fruit_chosen} nutrition info is not available right now.")
+            st.write(f"Sorry, nutrition info is not available for {fruit_chosen}.")
 
-    # Insert Statement with bind parameters to avoid parsing errors
+    # Secure database insert using Snowflake parameters (?)
     my_insert_stmt = """
         INSERT INTO smoothies.public.orders(ingredients, name_on_order)
         VALUES (?, ?)
