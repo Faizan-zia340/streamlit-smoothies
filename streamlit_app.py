@@ -57,7 +57,7 @@ if ingredients_list:
                     nutrition_rows.append({
                         '': metric,
                         'family': sf_data.get('family', ''),
-                        'genus': sf_data.get('genus', '') if 'genus' in sf_data else sf_data.get('genus ', ''),
+                        'genus': sf_data.get('genus', ''),
                         'id': sf_data.get('id', ''),
                         'name': sf_data.get('name', ''),
                         'nutrition': nutritions.get(metric, 0.0),
