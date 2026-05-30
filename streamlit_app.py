@@ -26,8 +26,8 @@ ingredients_list = st.multiselect(
 if ingredients_list:
     ingredients_string = ''
     
-    # 1. Ek khali list banayein saare dataframes ko jama karne ke liye
-    all_fruits_data = []
+    # Ek list structured rows collect karne ke liye
+    nutrition_rows = []
 
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
@@ -35,7 +35,7 @@ if ingredients_list:
         # Base string cleanup
         search_on = fruit_chosen.strip().lower()
         
-        # Mapping Fixes
+        # Mapping Fixes for Fruityvice
         if search_on == 'apples':
             search_on = 'apple'
         elif search_on == 'blueberries':
@@ -52,20 +52,32 @@ if ingredients_list:
             fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
             fv_data = fruityvice_response.json()
             
-            if "error" not in fv_data:
-                # Data ko flatten karein
-                fv_df = pd.json_normalize(fv_data)
-                # 2. Is fruit ka data list mein append kar dein
-                all_fruits_data.append(fv_df)
+            if "error" not in fv_data and "nutritions" in fv_data:
+                nutritions = fv_data["nutritions"]
+                
+                # Image 3 ke horizontal-vertical stacked mapping layout ko manually mirror karna:
+                metrics = ['carbs', 'fat', 'protein', 'sugar']
+                api_keys = ['carbohydrates', 'fat', 'protein', 'sugar']
+                
+                for metric, key in zip(metrics, api_keys):
+                    nutrition_rows.append({
+                        '': metric,
+                        'family': fv_data.get('family', ''),
+                        'genus': fv_data.get('genus', ''),
+                        'id': fv_data.get('id', ''),
+                        'name': fv_data.get('name', ''),
+                        'nutrition': nutritions.get(key, 0.0),
+                        'order': fv_data.get('order', '')
+                    })
                 
         except Exception as e:
-            pass # Background mein skip karein taake app crash na ho
+            pass
 
-    # 3. LOOP KE BAHAR: Agar data collect hua hai, to sabko aik sath jor (combine) dein
-    if all_fruits_data:
-        st.subheader('Selected Fruits Nutrition Information')
-        # pd.concat se saare fruits ek hi table mein upar-neeche combine ho jayenge
-        combined_df = pd.concat(all_fruits_data, ignore_index=True)
+    # LOOP KE BAHAR: Saara data ek sath exact image 3 ke order mein display hoga
+    if nutrition_rows:
+        combined_df = pd.DataFrame(nutrition_rows)
+        # First index column ko left side empty label key set karna
+        combined_df.set_index('', inplace=True)
         st.dataframe(data=combined_df, use_container_width=True)
 
     # Secure database insert
