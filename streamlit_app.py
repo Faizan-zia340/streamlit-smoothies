@@ -15,7 +15,7 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# UPDATED: Select both FRUIT_NAME and SEARCH_ON columns from Snowflake
+# Select both FRUIT_NAME and SEARCH_ON columns from Snowflake
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON')).to_pandas()
 
 # Dropdown options display only the clean FRUIT_NAME values
@@ -31,24 +31,42 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # UPDATED: Get the matching SEARCH_ON value for the selected fruit
+        # Get the matching SEARCH_ON value for the selected fruit
         search_on = my_dataframe.loc[my_dataframe['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         
         try:
-            # UPDATED: Hit the correct smoothiefroot API using the search_on variable
+            # Hit the correct smoothiefroot API using the search_on variable
             smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + search_on)
             sf_data = smoothiefroot_response.json()
             
-            # Convert JSON data into a clean structured table matching Image 3 layout
-            if isinstance(sf_data, list):
-                sf_df = pd.json_normalize(sf_data)
-            else:
-                sf_df = pd.json_normalize([sf_data])
+            # Extract nested nutrition values to create the exact layout from Image 3
+            if "nutrition" in sf_data:
+                nutritions = sf_data["nutrition"]
+                metrics = ['carbs', 'fat', 'protein', 'sugar']
                 
-            st.dataframe(data=sf_df, use_container_width=True)
-            
+                nutrition_rows = []
+                for metric in metrics:
+                    nutrition_rows.append({
+                        '': metric,
+                        'family': sf_data.get('family', ''),
+                        'genus': fsf_data.get('genus', '') if 'genus' in sf_data else sf_data.get('genus ', ''),
+                        'id': sf_data.get('id', ''),
+                        'name': sf_data.get('name', ''),
+                        'nutrition': nutritions.get(metric, 0.0),
+                        'order': sf_data.get('order', '')
+                    })
+                
+                # Convert list of rows to DataFrame and set empty column as index
+                sf_df = pd.DataFrame(nutrition_rows)
+                sf_df.set_index('', inplace=True)
+                st.dataframe(data=sf_df, use_container_width=True)
+            else:
+                # Fallback if structure differs slightly
+                sf_df = pd.json_normalize(sf_data)
+                st.dataframe(data=sf_df, use_container_width=True)
+                
         except Exception as e:
             st.write(f"Sorry, nutrition info is not available for {fruit_chosen}.")
 
