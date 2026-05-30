@@ -1,6 +1,7 @@
 import streamlit as st
 from snowflake.snowpark.functions import col
 import requests
+import pandas as pd
 
 st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
 st.write("Choose the fruits you want in your custom Smoothie!")
@@ -12,10 +13,10 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# FIX: Only select FRUIT_NAME since SEARCH_ON column does not exist yet
+# Fetch table data
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME')).to_pandas()
 
-# Dropdown displays clean text strings
+# Dropdown menu
 ingredients_list = st.multiselect(
     'Choose up to 5 ingredients:',
     my_dataframe['FRUIT_NAME'].values, 
@@ -28,21 +29,27 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # Format the fruit name safely for the API URL (e.g., "Dragon Fruit" -> "Dragon%20Fruit")
-        search_on = fruit_chosen.replace(' ', '%20')
+        # FIX 1: Clean the string for the API call (strip spaces and convert to lowercase)
+        search_on = fruit_chosen.strip().lower()
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         try:
-            # Call the Fruityvice API using the formatted name string
+            # Call the Fruityvice API
             fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
             fv_data = fruityvice_response.json()
             
-            # Display the API data on screen
-            st.dataframe(data=fv_data, use_container_width=True)
+            # Check if API returned an error dictionary
+            if "error" in fv_data:
+                st.warning(f"Fruityvice API: {fv_data['error']} for {fruit_chosen}")
+            else:
+                # FIX 2: Flatten the nested JSON structure into a clean table matching Image 1
+                fv_df = pd.json_normalize(fv_data)
+                st.dataframe(data=fv_df, use_container_width=True)
+                
         except Exception as e:
-            st.write(f"Could not get nutrition info for {fruit_chosen}")
+            st.error(f"Could not connect to nutrition service for {fruit_chosen}")
 
-    # Build the insert statement securely using bind parameters (?)
+    # Secure database insert
     my_insert_stmt = """
         INSERT INTO smoothies.public.orders(ingredients, name_on_order)
         VALUES (?, ?)
@@ -50,6 +57,5 @@ if ingredients_list:
 
     time_to_insert = st.button('Submit Order')
     if time_to_insert:
-        # Execute statement safely using native parameters to avoid breaking on names like "faizan"
         session.sql(my_insert_stmt, params=[ingredients_string.strip(), name_on_order]).collect()
         st.success('Your Smoothie is ordered!', icon="✅")
