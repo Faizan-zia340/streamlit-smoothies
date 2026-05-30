@@ -25,6 +25,9 @@ ingredients_list = st.multiselect(
 
 if ingredients_list:
     ingredients_string = ''
+    
+    # 1. Ek khali list banayein saare dataframes ko jama karne ke liye
+    all_fruits_data = []
 
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
@@ -32,7 +35,7 @@ if ingredients_list:
         # Base string cleanup
         search_on = fruit_chosen.strip().lower()
         
-        # --- COMPLETE MAPPING FIX FOR ALL FRUITYVICE VARIATIONS ---
+        # Mapping Fixes
         if search_on == 'apples':
             search_on = 'apple'
         elif search_on == 'blueberries':
@@ -40,29 +43,30 @@ if ingredients_list:
         elif search_on == 'elderberries':
             search_on = 'elderberry'
         elif search_on == 'dragon fruit':
-            search_on = 'pitahaya'  # Fruityvice lists Dragon Fruit under its official name: Pitahaya
+            search_on = 'pitahaya'
         elif search_on == 'cantaloupe':
-            search_on = 'melon'     # Fruityvice lists Cantaloupe under its generic family name: Melon
-        elif search_on == 'ximenia':
-            search_on = 'olive'     # Fallback to a close substitute if an exotic fruit isn't in Fruityvice
-        # ----------------------------------------------------------
+            search_on = 'melon'
         
-        st.subheader(fruit_chosen + ' Nutrition Information')
         try:
             # Call the Fruityvice API
             fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
             fv_data = fruityvice_response.json()
             
-            # Check if API returned an error dictionary
-            if "error" in fv_data:
-                st.warning(f"Fruityvice API: {fv_data['error']} for {fruit_chosen}")
-            else:
-                # Flatten the nested JSON structure into a clean table row layout
+            if "error" not in fv_data:
+                # Data ko flatten karein
                 fv_df = pd.json_normalize(fv_data)
-                st.dataframe(data=fv_df, use_container_width=True)
+                # 2. Is fruit ka data list mein append kar dein
+                all_fruits_data.append(fv_df)
                 
         except Exception as e:
-            st.error(f"Could not connect to nutrition service for {fruit_chosen}")
+            pass # Background mein skip karein taake app crash na ho
+
+    # 3. LOOP KE BAHAR: Agar data collect hua hai, to sabko aik sath jor (combine) dein
+    if all_fruits_data:
+        st.subheader('Selected Fruits Nutrition Information')
+        # pd.concat se saare fruits ek hi table mein upar-neeche combine ho jayenge
+        combined_df = pd.concat(all_fruits_data, ignore_index=True)
+        st.dataframe(data=combined_df, use_container_width=True)
 
     # Secure database insert
     my_insert_stmt = """
