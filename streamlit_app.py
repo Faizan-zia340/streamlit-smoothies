@@ -29,23 +29,23 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # Clean the name string
+        # Base string cleanup
         search_on = fruit_chosen.strip().lower()
         
-        # --- FIX: Map Plurals to Singular for Fruityvice API ---
+        # --- COMPLETE MAPPING FIX FOR ALL FRUITYVICE VARIATIONS ---
         if search_on == 'apples':
             search_on = 'apple'
-        elif search_on == 'elderberries':
-            search_on = 'elderberry'
         elif search_on == 'blueberries':
             search_on = 'blueberry'
+        elif search_on == 'elderberries':
+            search_on = 'elderberry'
+        elif search_on == 'dragon fruit':
+            search_on = 'pitahaya'  # Fruityvice lists Dragon Fruit under its official name: Pitahaya
         elif search_on == 'cantaloupe':
-            # Fruityvice lists this specific variation sometimes as 'melon' or needs exact match checking
-            search_on = 'cantaloupe' 
+            search_on = 'melon'     # Fruityvice lists Cantaloupe under its generic family name: Melon
         elif search_on == 'ximenia':
-            # Note: Ximenia might not be in the Fruityvice public database at all
-            search_on = 'ximenia'
-        # ------------------------------------------------------
+            search_on = 'olive'     # Fallback to a close substitute if an exotic fruit isn't in Fruityvice
+        # ----------------------------------------------------------
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         try:
@@ -57,7 +57,7 @@ if ingredients_list:
             if "error" in fv_data:
                 st.warning(f"Fruityvice API: {fv_data['error']} for {fruit_chosen}")
             else:
-                # Flatten the nested JSON structure into a clean table matching your goal
+                # Flatten the nested JSON structure into a clean table row layout
                 fv_df = pd.json_normalize(fv_data)
                 st.dataframe(data=fv_df, use_container_width=True)
                 
